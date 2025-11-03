@@ -3,12 +3,13 @@
 Sqlsyncify是一个用于将MySQL数据导出到ElasticSearch的数据同步工具
 
 特点是低成本运行, 多段SQL分批导出MySQL，SQLite本地组装数据实现自定义大文档，多协程并发推送数据
+可用于替换Spark写入ES的高成本运行方式
 
 目前只做了全量同步
 
 基于go-zero框架运行
 
-SQLite 自 3.25.0 版本开始支持窗口函数，就能实现hive的函数实现
+SQLite 自 3.25.0 版本开始支持窗口函数，就能实现hive的CONCAT_WS + collect_set
 
 ```
 -- 连接sqlitte .db文件后执行sql可以看版本
