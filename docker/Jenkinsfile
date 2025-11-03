@@ -1,0 +1,54 @@
+pipeline {
+    agent {
+        node {
+            label 'composer'
+        }
+    }
+
+    environment {
+        HARBOR_CREDENTIAL_ID = 'your harbor auth'
+        GITLAB_CREDENTIAL_ID = 'your gitlab auth'
+        KUBECONFIG_CREDENTIAL_ID = 'your k8s token'
+        REGISTRY = 'harbor.your-domain.xxx'
+        PROJECT_NAME = 'search'
+        REPOSITORY_NAME = 'ai'
+        APP_NAME = 'sqlsyncify'
+        DOCKER_FILE = 'docker/Dockerfile'
+        DEPLOY_FILE = 'docker/deployment.yaml'
+    }
+
+    stages {
+        stage ('checkout scm') {
+            steps {
+                checkout(scm)
+            }
+        }
+
+        stage ('build & push') {
+            steps {
+                container ('base') {
+                    withCredentials([usernamePassword(passwordVariable : 'DOCKER_PASSWORD' ,usernameVariable : 'DOCKER_USERNAME' ,credentialsId : "$HARBOR_CREDENTIAL_ID" ,)]) {
+                        sh 'echo "$DOCKER_PASSWORD" | docker login $REGISTRY -u "$DOCKER_USERNAME" --password-stdin'
+                        sh 'docker build -f ${DOCKER_FILE} -t $REGISTRY/$REPOSITORY_NAME/$APP_NAME:SNAPSHOT-$BRANCH_NAME-$BUILD_NUMBER .'
+                        sh 'docker push  $REGISTRY/$REPOSITORY_NAME/$APP_NAME:SNAPSHOT-$BRANCH_NAME-$BUILD_NUMBER'
+                    }
+                }
+            }
+        }
+
+        stage('deploy to prod') {
+            steps {
+                container ('base') {
+                    withCredentials([
+                        kubeconfigFile(
+                        credentialsId: env.KUBECONFIG_CREDENTIAL_ID,
+                        variable: 'KUBECONFIG')
+                        ]) {
+                        sh 'envsubst < ${DEPLOY_FILE} | kubectl apply -f -'
+                   }
+                }
+            }
+        }
+    }
+}
+

@@ -1,0 +1,66 @@
+{
+  "dynamic": true,
+  "properties": {
+    "id": {
+      "type": "integer"
+    },
+    "catId": {
+      "type": "integer"
+    },
+    "catName": {
+      "type": "text"
+    },
+    "categories": {
+      "type": "nested",
+      "properties": {
+        "catId": {
+          "type": "integer"
+        },
+        "catName": {
+          "type": "text",
+          "analyzer": "default",
+          "search_analyzer": "shingle_analyzer"
+        }
+      }
+    },
+    "metaArrayJson": {
+      "type": "nested",
+      "properties": {
+        "meta_key": {
+          "type": "text",
+          "analyzer": "default",
+          "search_analyzer": "shingle_analyzer"
+        },
+        "meta_value": {
+          "type": "text",
+          "analyzer": "default",
+          "search_analyzer": "shingle_analyzer"
+        }
+      }
+    },
+    "postTitle": {
+      "type": "text",
+      "copy_to": [
+        "searchWords"
+      ],
+      "analyzer": "shingle_analyzer"
+    },
+    "postDate": {
+      "type": "text"
+    },
+    "postDateGmt": {
+      "type": "text"
+    },
+    "postModified": {
+      "type": "text"
+    },
+    "postModifiedGmt": {
+      "type": "text"
+    },
+    "searchWords": {
+      "type": "text",
+      "analyzer": "default",
+      "search_analyzer": "shingle_analyzer"
+    }
+  }
+}

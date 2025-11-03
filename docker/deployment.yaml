@@ -1,0 +1,67 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: ${APP_NAME}-deploy
+  namespace: ${PROJECT_NAME}
+  labels:
+    app: ${PROJECT_NAME}
+    component: ${APP_NAME}
+    version: v1
+  annotations:
+    deployment.kubernetes.io/revision: '3'
+    kubesphere.io/creator: zhaobin
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sqlsyncify
+      version: v1
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: sqlsyncify
+        version: v1
+    spec:
+      # volumes:
+      #   - name: volume-conf
+      #     configMap:
+      #       name: conf-yaml
+      #       items:
+      #         - key: sqlsyncify-api.yaml
+      #           path: sqlsyncify-api.yaml
+      #       defaultMode: 420
+      imagePullSecrets:
+        - name: harbor-secrets
+      containers:
+        - name: container-sqlsyncify
+          image: $REGISTRY/$REPOSITORY_NAME/$APP_NAME:SNAPSHOT-$BRANCH_NAME-$BUILD_NUMBER
+          ports:
+            - name: http-8080
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            limits:
+              cpu: '0.5'
+              memory: 2000Mi
+          # volumeMounts:
+          #   - name: volume-conf
+          #     readOnly: true
+          #     mountPath: /app/etc
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      # serviceAccountName: default
+      # serviceAccount: default
+      # securityContext: {}
+      # schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 50%
+      maxSurge: 50%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600

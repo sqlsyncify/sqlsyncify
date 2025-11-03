@@ -1,0 +1,64 @@
+syntax = "v1"
+
+type Request {
+	Site string `path:"site"`
+	//是否导入, 默认1=导入, 0=不导入
+	Import         bool `form:"import,optional,default=1"`
+	Export         bool `form:"export,optional,default=1"`
+	Alias          bool `form:"alias,optional,default=1"`
+	TestDataSource bool `form:"testds,optional,default=0"`
+	Debug          bool `form:"debug,optional,default=0"`
+}
+
+type Response {
+	Message string `json:"message"`
+}
+
+type SynonymRequest {
+	Site string `path:"site"`
+	Lang string `path:"lang"`
+}
+
+type SynonymResponse {
+	Synonym string `json:"synonym"`
+}
+
+type SynonymHeadRequest {
+	Site           string `path:"site"`
+	Lang           string `path:"lang"`
+	LastUpdateTime string `header:"If-Modified-Since,optional"`
+	Etag           string `header:"If-None-Match,optional"`
+}
+
+type SynonymHeadResponse {
+	ETag         string `head:"ETag"`
+	LastModified string `head:"Last-Modified"`
+}
+
+service sqlsyncify-api {
+	@handler AllHandler
+	get /sync/all/:site (Request) returns (Response)
+
+	@handler CleanNoAliasHandler
+	get /clean/noalias
+
+	@handler SynonymHeadHandler
+	head /synonym/:site/:lang (SynonymHeadRequest) returns (SynonymHeadResponse)
+
+	@handler SynonymHandler
+	get /synonym/:site/:lang (SynonymRequest) returns (SynonymResponse)
+	post /synonym/:site/:lang (SynonymRequest) returns (SynonymResponse)
+
+	@handler CleanNoAliasV5Handler
+	get /clean/noalias/v5
+
+	@handler RootHandler
+	get /
+
+	@handler TestLockFileHandler
+	get /test/lock/file
+
+	@handler TestLockMapHandler
+	get /test/lock/map
+}
+
