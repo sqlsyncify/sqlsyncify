@@ -1,6 +1,10 @@
 # 说明
 
-此工程用于多段SQL分批导出MySQL数据, 本地再组装数据后导入ElasticSearch
+Sqlsyncify是一个用于将MySQL数据导出到ElasticSearch的数据同步工具
+
+特点是低成本运行, 多段SQL分批导出MySQL，SQLite本地组装数据，多协程并发推送数据
+
+目前只做了全量同步
 
 基于go-zero框架运行
 
@@ -12,6 +16,12 @@ SELECT sqlite_version()
 ```
 
 同时支持: es5.6, es8(esapi通用，es6、7未验证)
+
+## 数据同步流程
+
+1. SQL抽取远程MySQL源数据,写入本地SQLite表，一个站一个.db文件，一个SQL一张表
+2. SQL读取本地SQLite, 合并多表组装成ES需要的格式
+3. 调用es http接口发起推送es, 可选择手工触发，或者定时任务触发
 
 ## 使用方式
 
@@ -29,12 +39,6 @@ SELECT sqlite_version()
    2. GET http://localhost:8080/synonym/{site}/{lang}
    3. curl -vv --head -H "If-Modified-Since:" -H "If-None-Match:" "http://localhost:8080/synonym/wordpress/en"
    4. curl -vv http://localhost:8080/synonym/wordpress/en
-
-## 数据同步流程
-
-1. SQL抽取远程MySQL源数据,写入本地SQLite表，一个站一个.db文件，一个SQL一张表
-2. SQL读取本地SQLite, 合并多表组装成ES需要的格式
-3. 调用es http接口发起推送es, 可选择手工触发，或者定时任务工具触发
 
 ## 数据源定义
 
