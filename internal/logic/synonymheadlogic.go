@@ -28,7 +28,7 @@ func NewSynonymHeadLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Synon
 // SynonymHead 获取网站的同义词配置
 func (l *SynonymHeadLogic) SynonymHead(req *types.SynonymHeadRequest) (*types.SynonymHeadResponse, error) {
 	// 查配置文件最后更改日期
-	// 用于不同的站点配置不同的数据源
+	// TODO 用于不同的站点配置不同的数据源
 	ymlFile := fmt.Sprintf("./etc/sites/%s/synonym.txt", req.Site)
 	stat, err := os.Stat(ymlFile)
 	if os.IsNotExist(err) {
