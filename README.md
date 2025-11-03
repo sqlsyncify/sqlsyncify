@@ -17,6 +17,10 @@ SELECT sqlite_version()
 
 同时支持: es5.6, es8(esapi通用，es6、7未验证)
 
+同义词插件依赖 https://github.com/sqlsyncify/elasticsearch-analysis-dynamic-synonym , forked from https://github.com/bells/elasticsearch-analysis-dynamic-synonym
+修复过8.7下的编译
+es5.6和es8的setting的同义词配置不同，要注意
+
 ## 数据同步流程
 
 1. SQL抽取远程MySQL源数据,写入本地SQLite表，一个站一个.db文件，一个SQL一张表

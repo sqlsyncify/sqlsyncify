@@ -1,13 +1,13 @@
 {
-  "dynamic": true,
+  "dynamic": "false",
   "properties": {
     "id": {
       "type": "integer"
     },
-    "catId": {
+    "cat_id": {
       "type": "integer"
     },
-    "catName": {
+    "cat_name": {
       "type": "text"
     },
     "categories": {
@@ -38,23 +38,23 @@
         }
       }
     },
-    "postTitle": {
+    "post_title": {
       "type": "text",
       "copy_to": [
         "searchWords"
       ],
       "analyzer": "shingle_analyzer"
     },
-    "postDate": {
+    "post_date": {
       "type": "text"
     },
-    "postDateGmt": {
+    "post_date_gmt": {
       "type": "text"
     },
-    "postModified": {
+    "post_modified": {
       "type": "text"
     },
-    "postModifiedGmt": {
+    "post_modified_gmt": {
       "type": "text"
     },
     "searchWords": {

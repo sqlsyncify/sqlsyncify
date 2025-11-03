@@ -1,5 +1,4 @@
 SET group_concat_max_len = 10485760;  -- 10MB
-
 select
     wp.ID
      ,CONCAT(

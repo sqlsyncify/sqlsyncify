@@ -10,11 +10,11 @@ SELECT
      ,wp.post_modified
      ,wp.post_modified_gmt
      ,wp.guid
-     ,pc.catId
-     ,pc.catName
+     ,pc.cat_id
+     ,pc.cat_name
      ,pm.metaArrayJson
      ,c.categories
 FROM  posts wp
 JOIN post_meta pm ON wp.ID = pm.ID
 JOIN post_cates pc ON wp.ID = pc.ID
-JOIN cates c ON pc.catId = c.catId
+JOIN cates c ON pc.cat_id = c.cat_id

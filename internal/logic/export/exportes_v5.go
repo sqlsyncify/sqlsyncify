@@ -88,7 +88,7 @@ func (exp *exporterImplement) runV5() (uint64, error) {
 		return 0, err
 	}
 
-	dirPath := "./etc/sql-export/" + exp.cfg.SiteConf.Site
+	dirPath := fmt.Sprintf("etc/sites/%s/sql-export/", exp.cfg.SiteConf.Site)
 	// 使用os.Stat获取文件信息
 	_, err = os.Stat(dirPath)
 	if os.IsNotExist(err) {
@@ -100,11 +100,11 @@ func (exp *exporterImplement) runV5() (uint64, error) {
 	}
 	sqlFiles, _ := utils.ScanDir(dirPath)
 
-	mapping, err := os.ReadFile(fmt.Sprintf("etc/sites/%s/mapping.json", exp.cfg.SiteConf.Site))
+	mapping, err := os.ReadFile(fmt.Sprintf("etc/sites/%s/mapping_v5.json", exp.cfg.SiteConf.Site))
 	if err != nil {
 		return 0, errors.New("ExportEs, read mapping error:" + err.Error())
 	}
-	setting, err := os.ReadFile(fmt.Sprintf("etc/sites/%s/setting.json", exp.cfg.SiteConf.Site))
+	setting, err := os.ReadFile(fmt.Sprintf("etc/sites/%s/setting_v5.json", exp.cfg.SiteConf.Site))
 	if err != nil {
 		return 0, errors.New("ExportEs, read setting error:" + err.Error())
 	}
@@ -287,6 +287,8 @@ func (exp *exporterImplement) loadDataFromSqlFileV5(file string) error {
 	log.Println("Load File:", file)
 	// es5.6 doc type
 	docType := exp.cfg.SiteConf.DocTypeName
+	// es 5.6 doc type 不能以下滑线开头
+	docType = strings.TrimPrefix(docType, "_")
 
 	sqlf, err := os.ReadFile(file)
 	if err != nil {

@@ -58,6 +58,13 @@ func NewImporter(cfg *Config) Importer {
 	return &importerImplement{cfg: cfg}
 }
 
+func (i *importerImplement) execOnDb(exDB *sql.DB, sql string, args ...any) (sql.Result, error) {
+	if exDB != nil {
+		return exDB.ExecContext(i.cfg.Ctx, sql, args...)
+	}
+	return i.cfg.Db.ExecContext(i.cfg.Ctx, sql, args...)
+}
+
 func (i *importerImplement) getRowsFromDb(exDB *sql.DB, sql string, args ...any) (*sql.Rows, error) {
 	// 以SELECT开头的 && 没有limit && 如果开启了limit -> 附加limit在末尾
 	sel := utils.IsPrefix(sql, "SELECT")
@@ -185,14 +192,11 @@ func (i *importerImplement) loadDataFromSqlFile(file string) error {
 	if strings.Contains(sqlStr, "{lang}") {
 		sqlStr = strings.ReplaceAll(sqlStr, "{lang}", i.cfg.SiteConf.Lang)
 	}
-	if false == utils.IsPrefix(sqlStr, "SELECT") {
-		return fmt.Errorf("invalid sql: do not start with SELECT")
-	}
 
 	//sql文件名做新表名
 	fileNames := strings.Split(file, "/")
 	fName := fileNames[len(fileNames)-1]
-	tableName := fName[strings.Index(fName, "_")+1 : strings.Index(fName, ".")]
+	tableName := fName[:strings.Index(fName, ".")]
 	log.Println("tableName:", tableName)
 	if i.cfg.Debug {
 		log.Println("sql:", sqlStr)
@@ -215,6 +219,24 @@ func (i *importerImplement) loadDataFromSqlFile(file string) error {
 		if err != nil {
 			return fmt.Errorf("error at connect exDb:%v", err)
 		}
+	}
+
+	sqlList := strings.Split(sqlStr, ";")
+	sqlListLen := len(sqlList)
+	if sqlListLen > 1 {
+		// for set
+		for _, sqlItem := range sqlList[0 : sqlListLen-1] {
+			_, err2 := i.execOnDb(exDb, sqlItem)
+			if err2 != nil {
+				log.Println(sqlItem, "Error:", err2.Error())
+			}
+		}
+
+		// for select
+		sqlStr = sqlList[sqlListLen-1]
+	}
+	if false == utils.IsPrefix(sqlStr, "SELECT") {
+		return fmt.Errorf("invalid sql: do not start with SELECT")
 	}
 	//读取远程数据
 	//TODO 远程表数据上千万行时，要拆分数据行，分批读取

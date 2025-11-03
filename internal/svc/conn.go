@@ -14,7 +14,7 @@ import (
 
 func NewSiteConf(site string) (*config.SiteConfig, error) {
 	// 用于不同的站点配置不同的数据源
-	ymlFile := fmt.Sprintf("./etc/sites/%s/conf.yaml", site)
+	ymlFile := fmt.Sprintf("./etc/sites/%s/%s.yaml", site, site)
 	log.Println("load site:", ymlFile)
 	var cfg config.SiteConfig
 	err := conf.Load(ymlFile, &cfg)

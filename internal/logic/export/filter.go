@@ -47,7 +47,10 @@ func (exp *exporterImplement) metaMapKeys(k string) string {
 func (exp *exporterImplement) phpUnSerialize(keys []string, metaJson []interface{}, result map[string]any) {
 	for i, m := range metaJson {
 		meta := m.(map[string]interface{})
-		if k, ok1 := meta["meta_key"]; ok1 && utils.InArray(keys, k.(string)) {
+		if k, ok1 := meta["meta_key"]; ok1 {
+			if k == nil || utils.InArray(keys, k.(string)) == false {
+				continue
+			}
 			if v, ok2 := meta["meta_value"]; ok2 != false {
 				tmpv, err := gophp.Unserialize([]byte(v.(string)))
 				if err == nil {
