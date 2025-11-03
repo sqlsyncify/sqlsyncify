@@ -11,7 +11,7 @@ Telemetry:
   Disable: true
 
 # for create es index setting.json:remote_synonym
-AppHost: "http://10.68.1.62:8888"
+AppHost: "http://192.168.1.100:8080"
 
 Middlewares:
   Trace: false

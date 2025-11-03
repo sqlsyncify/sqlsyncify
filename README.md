@@ -1,8 +1,8 @@
-# 说明
+# Sqlsyncify
 
 Sqlsyncify是一个用于将MySQL数据导出到ElasticSearch的数据同步工具
 
-特点是低成本运行, 多段SQL分批导出MySQL，SQLite本地组装数据，多协程并发推送数据
+特点是低成本运行, 多段SQL分批导出MySQL，SQLite本地组装数据实现自定义大文档，多协程并发推送数据
 
 目前只做了全量同步
 
@@ -16,10 +16,17 @@ SELECT sqlite_version()
 ```
 
 同时支持: es5.6, es8(esapi通用，es6、7未验证)
-
-同义词插件依赖 https://github.com/sqlsyncify/elasticsearch-analysis-dynamic-synonym , forked from https://github.com/bells/elasticsearch-analysis-dynamic-synonym
+```
+同义词插件依赖
+https://github.com/sqlsyncify/elasticsearch-analysis-dynamic-synonym
+forked from https://github.com/bells/elasticsearch-analysis-dynamic-synonym
 修复过8.7下的编译
 es5.6和es8的setting的同义词配置不同，要注意
+
+es数据推送依赖
+https://github.com/elastic/go-elasticsearch/v8
+https://github.com/elastic/go-elasticsearch/v5
+```
 
 ## 数据同步流程
 
