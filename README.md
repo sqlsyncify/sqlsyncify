@@ -1,93 +1,113 @@
 # Sqlsyncify
 
-Sqlsyncify是一个用于将MySQL数据导出到ElasticSearch的数据同步工具
+Sqlsyncify 是一个高效的 MySQL 到 ElasticSearch 数据同步工具。
 
-特点是低成本运行, 多段SQL分批导出MySQL，SQLite本地组装数据实现自定义大文档，多协程并发推送数据
-可用于替换Spark写入ES的高成本运行方式
+## 主要特点
 
-目前只做了全量同步
+- 低成本运行：无需依赖昂贵的大数据处理框架
+- 分批处理：多段 SQL 分批导出 MySQL 数据
+- 本地数据组装：使用 SQLite 在本地组装自定义大文档
+- 高性能推送：多协程并发推送数据到 ElasticSearch
+- 灵活配置：支持自定义数据源和映射规则
+- 版本兼容：支持 ElasticSearch 5.6 和 8.x 版本
 
-基于go-zero框架运行
+## 适用场景
 
-SQLite 自 3.25.0 版本开始支持窗口函数，就能实现hive的CONCAT_WS + collect_set
+- 全量数据同步：定期运行，补全可能缺失的数据
+- 混合同步模式：可与实时同步系统配合使用
+- 大文档数据同步：适合需要多表关联的复杂数据结构
 
+## 技术依赖
+
+### 基础框架
+- 基于 go-zero 框架开发
+- 使用 SQLite 3.25.0+ (支持窗口函数)
+
+### ElasticSearch 插件支持
+- 同义词插件：[elasticsearch-analysis-dynamic-synonym](https://github.com/sqlsyncify/elasticsearch-analysis-dynamic-synonym)
+  - 已针对 ES 8.7 版本优化
+  - 支持 ES 5.6 和 8.x 不同配置模式
+- ES 客户端：
+  - ES 8.x: github.com/elastic/go-elasticsearch/v8
+  - ES 5.x: github.com/elastic/go-elasticsearch/v5
+
+## 工作流程
+
+1. **数据抽取**
+   - 从 MySQL 源数据库抽取数据
+   - 写入本地 SQLite 数据库（每个站点独立的 .db 文件）
+   - 每个 SQL 查询结果存储为独立表
+
+2. **数据组装**
+   - 读取本地 SQLite 数据
+   - 通过 SQL 合并多表数据
+   - 按 ES 文档格式组装数据
+
+3. **数据推送**
+   - 调用 ES HTTP 接口推送数据
+   - 支持手动触发或定时任务
+
+## API 接口
+
+### 同步接口
 ```
--- 连接sqlitte .db文件后执行sql可以看版本
-SELECT sqlite_version()
+# 全量更新
+GET http://localhost:8080/sync/all/{site}
+
+# 仅导入 MySQL 数据到 SQLite
+GET http://localhost:8080/sync/all/{site}?export=0
+
+# 仅从 SQLite 导出到 ES
+GET http://localhost:8080/sync/all/{site}?import=0
 ```
 
-同时支持: es5.6, es8(esapi通用，es6、7未验证)
+### 索引管理接口
 ```
-同义词插件依赖
-https://github.com/sqlsyncify/elasticsearch-analysis-dynamic-synonym
-forked from https://github.com/bells/elasticsearch-analysis-dynamic-synonym
-修复过8.7下的编译
-es5.6和es8的setting的同义词配置不同，要注意
-
-es数据推送依赖
-https://github.com/elastic/go-elasticsearch/v8
-https://github.com/elastic/go-elasticsearch/v5
+# 清理无别名索引
+GET http://localhost:8080/clean/noalias
+GET http://localhost:8080/clean/noalias/v5
 ```
 
-## 数据同步流程
-
-1. SQL抽取远程MySQL源数据,写入本地SQLite表，一个站一个.db文件，一个SQL一张表
-2. SQL读取本地SQLite, 合并多表组装成ES需要的格式
-3. 调用es http接口发起推送es, 可选择手工触发，或者定时任务触发
-
-## 使用方式
-
-1. 全量更新
-   1. http://localhost:8080/sync/all/{site}
-1. 全量更新-只导入mysql数据到本地SQLite, 不导出到es
-    1. http://localhost:8080/sync/all/{site}?export=0
-1. 全量更新-不导入mysql, 只导出SQLite到es
-    1. http://localhost:8080/sync/all/{site}?import=0
-1. 清理没有别名的索引
-   1. curl -vv http://localhost:8080/clean/noalias
-   1. curl -vv http://localhost:8080/clean/noalias/v5
-1. 获取同义词配置, 在mapping中定义使用
-   1. HEAD http://localhost:8080/synonym/{site}/{lang}
-   2. GET http://localhost:8080/synonym/{site}/{lang}
-   3. curl -vv --head -H "If-Modified-Since:" -H "If-None-Match:" "http://localhost:8080/synonym/wordpress/en"
-   4. curl -vv http://localhost:8080/synonym/wordpress/en
-
-## 数据源定义
-
-在 etc/datasources 目录, 一个数据源做一个文件
-
-## 导出MYSQL数据的SQL
-
-在 etc/sites/{site}sql-import 目录
-
-## 导入ES的SQL
-
-在 etc/sites/{site}/sql-export 目录
-
-# 增加新的api接口方法
-- 不是必须，直接修改internal目录，依照添加go代码，需要熟悉go-zero即可
-
-1. 修改好 sqlsyncify.api
-2. 执行
+### 同义词配置接口
 ```
+# 获取同义词配置
+HEAD/GET http://localhost:8080/synonym/{site}/{lang}
+```
+
+## 项目配置
+
+### 配置文件结构
+- `etc/datasources/`: 数据源配置目录
+- `etc/sites/{site}/sql-import/`: MySQL 导出 SQL 配置
+- `etc/sites/{site}/sql-export/`: ES 导入 SQL 配置
+
+## 开发指南
+
+### 添加新 API 接口
+1. 修改 `sqlsyncify.api` 文件
+2. 执行命令生成代码：
+```bash
 goctl api go --api sqlsyncify.api --dir .
-
 ```
 
-# pprof性能分析
-- sqlsyncify默认集成了pprof, 默认禁用
-- 开启办法：
-  - 设置环境变量 APP_DEBUG=true
-  - 重启应用
+## 性能分析
 
-## 浏览器查看pprof性能分析
+### 启用 pprof
+- 设置环境变量：`APP_DEBUG=true`
+- 重启应用
+
+### 性能监控工具
+```bash
+# 查看性能分析面板
 http://localhost:6060/debug/pprof
 
-## 查看内存占用
+# 查看内存占用
 go tool pprof --text http://localhost:6060/debug/pprof/heap
 
-## 查看web分析
+# 图形化分析界面
 go tool pprof -http=:7778 http://localhost:6060/debug/pprof/heap
+```
 
-浏览器打开 http://localhost:7778
+## 许可证
 
+MIT
