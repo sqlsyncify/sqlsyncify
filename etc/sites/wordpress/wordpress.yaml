@@ -1,0 +1,13 @@
+Site: "wordpress"
+IndexName: "wordpress"
+Lang: "en"
+DataSource: "wordpress_db"
+EsVersion: "8.7"
+# EsVersion: "5.6"
+# elasticsearch cluster
+EsCluster: "http://10.68.1.62:9200"
+EsApiKey: ""
+ImportLimit: 0
+TimeZone: ""
+DocTypeName: "_doc"
+DocIdKey: "ID"

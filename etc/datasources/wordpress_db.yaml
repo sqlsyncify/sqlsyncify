@@ -1,0 +1,8 @@
+Host: "127.0.0.1"
+Port: 3306
+Dbname: "wordpress"
+Username: "root"
+Password: "root"
+Driver: "mysql"
+TimeZone: "Local"
+InitSql: "SET SESSION group_concat_max_len = 10485760;"

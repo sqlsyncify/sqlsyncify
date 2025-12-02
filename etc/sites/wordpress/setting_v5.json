@@ -1,0 +1,124 @@
+{
+  "index": {
+    "refresh_interval": "10s",
+    "number_of_shards": "1",
+    "number_of_replicas": "1",
+    "max_result_window": "100000",
+    "analysis": {
+      "filter": {
+        "remote_synonym": {
+          "type": "extend_synonym",
+          "synonyms_url": "{host}/synonym/{site}/{lang}",
+          "interval": 36000
+        },
+        "remote_synonym_graph": {
+          "type": "extend_synonym_graph",
+          "synonyms_url": "{host}/synonym/{site}/{lang}",
+          "interval": 36000
+        },
+        "my_stop": {
+          "type": "stop",
+          "stopwords": "_english_"
+        },
+        "shingle": {
+          "max_shingle_size": "2",
+          "min_shingle_size": "2",
+          "output_unigrams": "true",
+          "type": "shingle"
+        }
+      },
+      "char_filter": {
+        "whitespace_replace_filter": {
+          "pattern": " ",
+          "type": "pattern_replace",
+          "replacement": ""
+        },
+        "special_char_replace_filter": {
+          "pattern": "'|_",
+          "type": "pattern_replace",
+          "replacement": " "
+        }
+      },
+      "normalizer": {
+        "lowercase_normal": {
+          "filter": [
+            "lowercase"
+          ],
+          "type": "custom"
+        }
+      },
+      "analyzer": {
+        "default_search": {
+          "filter": [
+            "lowercase",
+            "my_stop",
+            "remote_synonym_graph"
+          ],
+          "char_filter": [
+            "special_char_replace_filter"
+          ],
+          "tokenizer": "lowercase"
+        },
+        "synonym" : {
+          "tokenizer" : "whitespace",
+          "filter" : ["remote_synonym"]
+        },
+        "default": {
+          "filter": [
+            "lowercase",
+            "my_stop",
+            "remote_synonym"
+          ],
+          "char_filter": [
+            "special_char_replace_filter"
+          ],
+          "tokenizer": "lowercase"
+        },
+        "keyword_analyzer": {
+          "filter": [
+            "lowercase"
+          ],
+          "type": "custom",
+          "tokenizer": "keyword"
+        },
+        "comma_split_pattern_analyzer": {
+          "pattern": ",",
+          "type": "pattern"
+        },
+        "whitespace_analyzer": {
+          "filter": [
+            "lowercase"
+          ],
+          "type": "custom",
+          "tokenizer": "whitespace"
+        },
+        "shingle_search": {
+          "filter": [
+            "lowercase",
+            "my_stop",
+            "remote_synonym_graph",
+            "shingle"
+          ],
+          "char_filter": [
+            "special_char_replace_filter"
+          ],
+          "type": "custom",
+          "tokenizer": "lowercase"
+        },
+        "shingle_analyzer": {
+          "filter": [
+            "lowercase",
+            "my_stop",
+            "remote_synonym",
+            "shingle"
+          ],
+          "char_filter": [
+            "special_char_replace_filter"
+          ],
+          "type": "custom",
+          "tokenizer": "lowercase"
+        }
+      }
+    }
+  }
+}

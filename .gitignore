@@ -1,0 +1,6 @@
+/storage/*
+!storage/.gitkeep
+.idea
+bin/
+etc/datasources/local_db.yaml
+etc/sites/local/

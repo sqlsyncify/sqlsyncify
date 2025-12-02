@@ -1,0 +1,27 @@
+Name: sqlsyncify-api
+Host: 0.0.0.0
+Port: 8080
+# milliseconds
+Timeout: 1800000
+Verbose: false
+Log:
+  #Mode: file,console
+  Encoding: plain
+Telemetry:
+  Disable: true
+
+# for create es index setting.json:remote_synonym
+AppHost: "http://10.68.1.62:8888"
+
+Middlewares:
+  Trace: false
+  Prometheus: false
+  MaxConns: true
+  Breaker: false
+  Shedding: false
+  Timeout: true
+  Recover: true
+  Metrics: false
+  Log: true
+  MaxBytes: false
+  Gunzip: false

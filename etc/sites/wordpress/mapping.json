@@ -1,0 +1,66 @@
+{
+  "dynamic": "false",
+  "properties": {
+    "id": {
+      "type": "integer"
+    },
+    "cat_id": {
+      "type": "integer"
+    },
+    "cat_name": {
+      "type": "text"
+    },
+    "categories": {
+      "type": "nested",
+      "properties": {
+        "catId": {
+          "type": "integer"
+        },
+        "catName": {
+          "type": "text",
+          "analyzer": "default",
+          "search_analyzer": "shingle_analyzer"
+        }
+      }
+    },
+    "metaArrayJson": {
+      "type": "nested",
+      "properties": {
+        "meta_key": {
+          "type": "text",
+          "analyzer": "default",
+          "search_analyzer": "shingle_analyzer"
+        },
+        "meta_value": {
+          "type": "text",
+          "analyzer": "default",
+          "search_analyzer": "shingle_analyzer"
+        }
+      }
+    },
+    "post_title": {
+      "type": "text",
+      "copy_to": [
+        "searchWords"
+      ],
+      "analyzer": "shingle_analyzer"
+    },
+    "post_date": {
+      "type": "text"
+    },
+    "post_date_gmt": {
+      "type": "text"
+    },
+    "post_modified": {
+      "type": "text"
+    },
+    "post_modified_gmt": {
+      "type": "text"
+    },
+    "searchWords": {
+      "type": "text",
+      "analyzer": "default",
+      "search_analyzer": "shingle_analyzer"
+    }
+  }
+}
