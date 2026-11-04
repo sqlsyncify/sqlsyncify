@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"sqlsyncify/internal/utils"
@@ -27,6 +28,8 @@ func (exp *exporterImplement) Alias() error {
 		return err
 	}
 	if res.StatusCode == http.StatusNotFound {
+		_, _ = io.Copy(io.Discard, res.Body)
+		res.Body.Close()
 		log.Println("alias not found, put alias", exp.cfg.SiteConf.AliasName, "->", exp.cfg.FullIndexName)
 		//add alias
 		res, err = exp.cfg.EsClient.Indices.PutAlias([]string{exp.cfg.FullIndexName}, exp.cfg.SiteConf.AliasName)
@@ -34,11 +37,15 @@ func (exp *exporterImplement) Alias() error {
 			return errors.New("put alias error:" + err.Error())
 		}
 		if res.IsError() {
-			return errors.New("put alias res error:" + res.String())
+			msg := res.String()
+			res.Body.Close()
+			return errors.New("put alias res error:" + msg)
 		}
 	} else if res.IsError() {
-		log.Println("IndicesExistsAliasRequest fail:", res.String())
-		return errors.New(res.String())
+		msg := res.String()
+		res.Body.Close()
+		log.Println("IndicesExistsAliasRequest fail:", msg)
+		return errors.New(msg)
 	}
 	res.Body.Close()
 
@@ -50,7 +57,9 @@ func (exp *exporterImplement) Alias() error {
 		return err
 	}
 	if resp.IsError() {
-		return errors.New("get alias error:" + resp.String())
+		msg := resp.String()
+		resp.Body.Close()
+		return errors.New("get alias error:" + msg)
 	}
 	body := new(bytes.Buffer)
 	_, _ = body.ReadFrom(resp.Body)
@@ -126,7 +135,9 @@ func (exp *exporterImplement) Alias() error {
 	if err != nil {
 		return errors.New("update alias fail:" + err.Error())
 	} else if res2.IsError() {
-		return errors.New("update alias error:" + res2.String())
+		msg := res2.String()
+		res2.Body.Close()
+		return errors.New("update alias error:" + msg)
 	}
 	log.Println(res2.String())
 	res2.Body.Close()

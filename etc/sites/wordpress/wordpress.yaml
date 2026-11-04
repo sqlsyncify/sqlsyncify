@@ -5,7 +5,7 @@ DataSource: "wordpress_db"
 EsVersion: "8.7"
 # EsVersion: "5.6"
 # elasticsearch cluster
-EsCluster: "http://10.68.1.62:9200"
+EsCluster: "http://127.0.0.1:9200"
 EsApiKey: ""
 ImportLimit: 0
 TimeZone: ""

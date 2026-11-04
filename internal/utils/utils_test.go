@@ -30,7 +30,7 @@ func TestPrefix(t *testing.T) {
 		t.Fatal("FAIL")
 	}
 	t.Log(os.Getwd())
-	sql, err := os.ReadFile("../../etc/wordpress/sql-import/posts.sql")
+	sql, err := os.ReadFile("../../etc/sites/wordpress/sql-import/posts.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,6 +145,12 @@ func TestInArray(t *testing.T) {
 				t.Errorf("InArray() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestIsPrefixShortInput(t *testing.T) {
+	if IsPrefix("", "SELECT") || IsPrefix("--", "SELECT") || IsPrefix("se", "SELECT") {
+		t.Fatal("short input must not match or panic")
 	}
 }
 

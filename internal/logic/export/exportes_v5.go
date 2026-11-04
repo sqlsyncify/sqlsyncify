@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sqlsyncify/internal/utils"
 	"strings"
@@ -60,11 +61,15 @@ func (exp *exporterImplement) initV5() error {
 		BatchSizeBytes: 5 * 1000 * 1000,
 		BatchNum:       200,
 	}
-
-	// https://github.com/elastic/go-elasticsearch/blob/main/_examples/bulk/indexer.go
-	esClientV5, err := elasticsearchV5.NewClient(elasticsearchV5.Config{
-		Addresses: strings.Split(exp.cfg.SiteConf.EsCluster, ","),
-	})
+	addrs, err := utils.ParseESAddresses(exp.cfg.SiteConf.EsCluster)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(exp.cfg.SiteConf.EsApiKey) != "" {
+		// ES 5.x client has no API-key field. Callers still set EsApiKey for 8.x.
+		log.Println("EsApiKey is ignored for Elasticsearch 5.x clients")
+	}
+	esClientV5, err := elasticsearchV5.NewClient(elasticsearchV5.Config{Addresses: addrs})
 	if err != nil {
 		return errors.New("ExportEs, create es client error:" + err.Error())
 	}
@@ -72,15 +77,30 @@ func (exp *exporterImplement) initV5() error {
 	return nil
 }
 
+func bulkMeta(docID, docType string) ([]byte, error) {
+	meta, err := json.Marshal(map[string]any{
+		"index": map[string]any{
+			"_id":   docID,
+			"_type": docType,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return append(meta, '\n'), nil
+}
+
 // runV5 导出到es
 // 返回成功率百分比
 func (exp *exporterImplement) runV5() (uint64, error) {
-	log.Println("conf.EsClusterV5", exp.cfg.SiteConf.EsCluster)
-	if len(exp.cfg.SiteConf.EsCluster) == 0 {
-		return 0, errors.New("ExportV5, require es cluster v5 addr")
+	if !utils.SafeIndexToken(exp.cfg.FullIndexName) {
+		return 0, errors.New("invalid index name")
+	}
+	if exp.cfg.SiteConf.DocTypeName != "" && !utils.SafeDocType(exp.cfg.SiteConf.DocTypeName) {
+		return 0, errors.New("invalid document type")
 	}
 	if exp.cfg.Debug {
-		log.Println("run v5, es v5 addr:", exp.cfg.SiteConf.EsCluster)
+		log.Println("run v5")
 	}
 
 	err := exp.initV5()
@@ -88,29 +108,45 @@ func (exp *exporterImplement) runV5() (uint64, error) {
 		return 0, err
 	}
 
-	dirPath := fmt.Sprintf("etc/sites/%s/sql-export/", exp.cfg.SiteConf.Site)
-	// 使用os.Stat获取文件信息
-	_, err = os.Stat(dirPath)
-	if os.IsNotExist(err) {
-		// 目录不存在
-		return 0, fmt.Errorf("[export v5] site:%s does not found", exp.cfg.SiteConf.Site)
-	} else if err != nil {
-		// 其他错误，例如权限问题
+	dirPath, err := utils.ResolveUnder("etc/sites", exp.cfg.SiteConf.Site, "sql-export")
+	if err != nil {
 		return 0, err
 	}
-	sqlFiles, _ := utils.ScanDir(dirPath)
+	_, err = os.Stat(dirPath)
+	if os.IsNotExist(err) {
+		return 0, fmt.Errorf("[export v5] site:%s does not found", exp.cfg.SiteConf.Site)
+	} else if err != nil {
+		return 0, err
+	}
+	sqlFiles, err := utils.ScanDir(dirPath)
+	if err != nil {
+		return 0, err
+	}
 
-	mapping, err := os.ReadFile(fmt.Sprintf("etc/sites/%s/mapping_v5.json", exp.cfg.SiteConf.Site))
+	mappingPath, err := utils.ResolveUnder("etc/sites", exp.cfg.SiteConf.Site, "mapping_v5.json")
+	if err != nil {
+		return 0, err
+	}
+	settingPath, err := utils.ResolveUnder("etc/sites", exp.cfg.SiteConf.Site, "setting_v5.json")
+	if err != nil {
+		return 0, err
+	}
+	mapping, err := os.ReadFile(mappingPath)
 	if err != nil {
 		return 0, errors.New("ExportEs, read mapping error:" + err.Error())
 	}
-	setting, err := os.ReadFile(fmt.Sprintf("etc/sites/%s/setting_v5.json", exp.cfg.SiteConf.Site))
+	setting, err := os.ReadFile(settingPath)
 	if err != nil {
 		return 0, errors.New("ExportEs, read setting error:" + err.Error())
 	}
-	// setting替换关键词
-	setting = exp.filterSetting(setting)
-	mapping = exp.filterSetting(mapping)
+	setting, err = exp.filterSetting(setting)
+	if err != nil {
+		return 0, err
+	}
+	mapping, err = exp.filterSetting(mapping)
+	if err != nil {
+		return 0, err
+	}
 
 	log.Println("ready to create new index:", exp.cfg.FullIndexName)
 	body := fmt.Sprintf(`{
@@ -127,8 +163,11 @@ func (exp *exporterImplement) runV5() (uint64, error) {
 	)
 	if err != nil {
 		return 0, errors.New("ExportEs, cannot create es index:" + err.Error())
-	} else if res.IsError() {
-		return 0, errors.New("ExportEs, cannot create es index:" + res.String())
+	}
+	if res.IsError() {
+		msg := res.String()
+		_ = res.Body.Close()
+		return 0, errors.New("ExportEs, cannot create es index:" + msg)
 	}
 	_ = res.Body.Close()
 
@@ -143,54 +182,68 @@ func (exp *exporterImplement) runV5() (uint64, error) {
 			count := 0
 			var buf bytes.Buffer
 			docType := ""
-			defer func() {
-				exp.cfgv5.WgWriteEs.Done()
-			}()
+			defer exp.cfgv5.WgWriteEs.Done()
 			for item := range exp.cfgv5.ChBatch {
-				if _, err = buf.Write(item.Meta); err != nil {
-					log.Printf("[worker-%03d] Read Meta [%s] error:%s", workerId, item.DocumentID, err)
+				if exp.failed() != nil {
 					continue
 				}
-				if _, err = buf.Write(item.Body); err != nil {
-					log.Printf("[worker-%03d] Read Body [%s] error:%s", workerId, item.DocumentID, err)
+				if _, werr := buf.Write(item.Meta); werr != nil {
+					log.Printf("[worker-%03d] Read Meta [%s] error:%s", workerId, item.DocumentID, werr)
+					continue
+				}
+				if _, werr := buf.Write(item.Body); werr != nil {
+					log.Printf("[worker-%03d] Read Body [%s] error:%s", workerId, item.DocumentID, werr)
 					continue
 				}
 				docType = item.docType
 				count++
 				if buf.Len() >= exp.cfgv5.BatchSizeBytes || count%exp.cfgv5.BatchNum == 0 {
-					// log.Printf("[worker-%03d] flush %d, size:%d\n ", workerId, count, buf.Len())
-					succ, errs := exp.insertBatch(buf.Bytes(), docType)
+					succ, errs, berr := exp.insertBatch(buf.Bytes(), docType)
 					buf.Reset()
+					if berr != nil {
+						exp.fail(berr)
+						continue
+					}
 					atomic.AddUint64(&numSuccess, succ)
 					atomic.AddUint64(&numErrors, errs)
 				}
 			}
-			if buf.Len() > 0 {
+			if buf.Len() > 0 && exp.failed() == nil {
 				log.Printf("[worker-%03d] flush %d, size:%d\n ", workerId, count, buf.Len())
-				succ, errs := exp.insertBatch(buf.Bytes(), docType)
-				atomic.AddUint64(&numSuccess, succ)
-				atomic.AddUint64(&numErrors, errs)
+				succ, errs, berr := exp.insertBatch(buf.Bytes(), docType)
+				if berr != nil {
+					exp.fail(berr)
+				} else {
+					atomic.AddUint64(&numSuccess, succ)
+					atomic.AddUint64(&numErrors, errs)
+				}
 			}
 			buf.Reset()
 		}(c)
 	}
 
+	var loadErr error
 	for _, file := range sqlFiles {
 		err = exp.loadDataFromSqlFileV5(file)
 		if err != nil {
 			log.Println(file, err)
+			loadErr = err
+			break
 		}
 	}
 	// 读取完要关闭通道
 	close(exp.cfgv5.ChBatch)
 
 	log.Println("waiting for all workers...")
-
-	select {
-	case <-exp.cfg.Ctx.Done():
-		return 0, exp.cfg.Ctx.Err()
-	default:
-		exp.cfgv5.WgWriteEs.Wait()
+	exp.cfgv5.WgWriteEs.Wait()
+	if loadErr != nil {
+		return 0, loadErr
+	}
+	if err = exp.cfg.Ctx.Err(); err != nil {
+		return 0, err
+	}
+	if err = exp.failed(); err != nil {
+		return 0, err
 	}
 	log.Println("ExportEsV5 done, numSuccess:", numSuccess, "numErrors", numErrors)
 	if numSuccess+numErrors == 0 {
@@ -203,7 +256,7 @@ func (exp *exporterImplement) runV5() (uint64, error) {
 // 批量写入本地文件,用于调试
 func (exp *exporterImplement) insertBatchLocalFile(buf []byte) {
 	// 打开文件（如果文件不存在则创建）,追加模式
-	file, err := os.OpenFile(fmt.Sprintf("storage/error_%s", exp.cfg.FullIndexName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(filepath.Join("storage", "error_"+filepath.Base(exp.cfg.FullIndexName)), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		log.Println("error:打开文件时出错:", err)
 		return
@@ -219,15 +272,16 @@ func (exp *exporterImplement) insertBatchLocalFile(buf []byte) {
 }
 
 // 批量写入es
-func (exp *exporterImplement) insertBatch(buf []byte, docType string) (uint64, uint64) {
+func (exp *exporterImplement) insertBatch(buf []byte, docType string) (uint64, uint64, error) {
 
 	req := esapiV5.BulkRequest{Index: exp.cfg.FullIndexName, DocumentType: docType, Body: bytes.NewReader(buf)}
 	res, err := req.Do(exp.cfg.Ctx, exp.cfgv5.EsClientV5)
 
 	if err != nil {
 		log.Printf("error: Failure indexing batch: %s\n", err)
-		return 0, 0
+		return 0, 0, err
 	}
+	defer res.Body.Close()
 	// If the whole request failed, print error and mark all documents as failed
 	//
 	var (
@@ -237,21 +291,14 @@ func (exp *exporterImplement) insertBatch(buf []byte, docType string) (uint64, u
 		numSuccess uint64
 	)
 	if res.IsError() {
-		log.Println("error post:", string(buf))
+		exp.insertBatchLocalFile(buf)
+		log.Printf("error post bulk: status %d", res.StatusCode)
 		if err := json.NewDecoder(res.Body).Decode(&raw); err != nil {
 			log.Printf("error: Failure to to parse response body: %s \n", err)
-		} else {
-			// log
-			exp.insertBatchLocalFile(buf)
-
-			log.Printf("error: [%d] %s: %s",
-				res.StatusCode,
-				raw["error"].(map[string]interface{})["type"],
-				raw["error"].(map[string]interface{})["reason"],
-			)
+		} else if rawErr, ok := raw["error"].(map[string]interface{}); ok {
+			log.Printf("error: [%d] %v: %v", res.StatusCode, rawErr["type"], rawErr["reason"])
 		}
-		// A successful response might still contain errors for particular documents...
-		//
+		return 0, 0, fmt.Errorf("elasticsearch bulk failed: status %d", res.StatusCode)
 	} else {
 		if err := json.NewDecoder(res.Body).Decode(&blk); err != nil {
 			log.Printf("error: Failure to to parse response body: %s\n", err)
@@ -279,7 +326,7 @@ func (exp *exporterImplement) insertBatch(buf []byte, docType string) (uint64, u
 		}
 	}
 
-	return numSuccess, numErrors
+	return numSuccess, numErrors, nil
 }
 
 // 读取数据
@@ -295,7 +342,9 @@ func (exp *exporterImplement) loadDataFromSqlFileV5(file string) error {
 		return fmt.Errorf("readFile error:%v", err)
 	}
 	sqlStr := string(sqlf)
-	log.Println(sqlStr)
+	if exp.cfg.Debug {
+		log.Println(sqlStr)
+	}
 	// 不以SELECT开头的,就不用处理查询结果
 	if sel := utils.IsPrefix(sqlStr, "SELECT"); !sel {
 		_, err = exp.cfg.DbLocal.ExecContext(exp.cfg.Ctx, sqlStr)
@@ -328,8 +377,7 @@ func (exp *exporterImplement) loadDataFromSqlFileV5(file string) error {
 
 		// 扫描每一行数据
 		if err := rows.Scan(valuePtrs...); err != nil {
-			log.Println(file, "error scanning row:", err)
-			continue
+			return fmt.Errorf("%s scanning row: %w", file, err)
 		}
 		// 将结果存储到map中
 		result := make(map[string]any)
@@ -355,16 +403,22 @@ func (exp *exporterImplement) loadDataFromSqlFileV5(file string) error {
 			continue
 		}
 		docId := fmt.Sprintf("%v", result[primaryKey])
-		// Prepare the metadata payload
-		//
-		meta := []byte(fmt.Sprintf(`{"index":{"_id":"%s","_type":"%s"}}%s`, docId, docType, "\n"))
+		meta, err := bulkMeta(docId, docType)
+		if err != nil {
+			log.Printf("error: fail at encode meta %s: %v \n", docId, err)
+			continue
+		}
 
 		// Append newline to the data payload
 		//
 		jsonBody = append(jsonBody, "\n"...) // <-- Comment out to trigger failure for batch
 		// 在协程中再去积攒批量
-		exp.cfgv5.ChBatch <- &bulkIndexerItemV5{DocumentID: docId, docType: docType, Body: jsonBody, Meta: meta}
+		select {
+		case <-exp.cfg.Ctx.Done():
+			return exp.cfg.Ctx.Err()
+		case exp.cfgv5.ChBatch <- &bulkIndexerItemV5{DocumentID: docId, docType: docType, Body: jsonBody, Meta: meta}:
+		}
 
 	}
-	return nil
+	return rows.Err()
 }

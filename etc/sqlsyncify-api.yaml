@@ -10,8 +10,14 @@ Log:
 Telemetry:
   Disable: true
 
-# for create es index setting.json:remote_synonym
-AppHost: "http://10.68.1.62:8888"
+# URL Elasticsearch uses to fetch /synonym/{site}/{lang}. No credentials in this value.
+AppHost: "http://127.0.0.1:8080"
+
+# Admin routes (/sync/all, /clean/noalias) fail closed until a token is set.
+# Prefer the SQLSYNCIFY_AUTH_TOKEN environment variable over committing a secret.
+# AuthToken: ""
+
+MaxBytes: 1048576
 
 Middlewares:
   Trace: false
@@ -23,5 +29,5 @@ Middlewares:
   Recover: true
   Metrics: false
   Log: true
-  MaxBytes: false
+  MaxBytes: true
   Gunzip: false

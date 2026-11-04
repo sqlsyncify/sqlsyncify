@@ -23,8 +23,5 @@ func NewRootLogic(ctx context.Context, svcCtx *svc.ServiceContext) *RootLogic {
 }
 
 func (l *RootLogic) Root() (string, error) {
-	return `
-						<p><a href="/clean/noalias/wordpress">/clean/noalias/wordpress</a></p>
-						<p><a href="/sync/all/wordpress">/sync/all/wordpress</a></p>
-						`, nil
+	return `<p>sqlsyncify</p><p>Admin routes require Authorization: Bearer or X-Auth-Token.</p>`, nil
 }

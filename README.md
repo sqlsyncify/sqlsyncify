@@ -50,22 +50,33 @@ Sqlsyncify 是一个高效的 MySQL 到 ElasticSearch 数据同步工具。
 ## API 接口
 
 ### 同步接口
-```
+
+`/sync/all` 与 `/clean/noalias` 需要管理令牌。设置环境变量 `SQLSYNCIFY_AUTH_TOKEN`（优先）或配置文件中的 `AuthToken`。两者都为空时这些接口返回 401。
+
+```bash
 # 全量更新
-GET http://localhost:8080/sync/all/{site}
+curl -H "Authorization: Bearer $SQLSYNCIFY_AUTH_TOKEN" \
+  "http://127.0.0.1:8080/sync/all/{site}"
 
 # 仅导入 MySQL 数据到 SQLite
-GET http://localhost:8080/sync/all/{site}?export=0
+curl -H "Authorization: Bearer $SQLSYNCIFY_AUTH_TOKEN" \
+  "http://127.0.0.1:8080/sync/all/{site}?export=0"
 
 # 仅从 SQLite 导出到 ES
-GET http://localhost:8080/sync/all/{site}?import=0
+curl -H "Authorization: Bearer $SQLSYNCIFY_AUTH_TOKEN" \
+  "http://127.0.0.1:8080/sync/all/{site}?import=0"
 ```
 
+也可以使用请求头 `X-Auth-Token`。
+
+`/clean/noalias/{site}` 只删除该站点生成的、且当前没有别名的索引，名称形如 `{IndexName}_YYYYMMDDHHMMSS`。不会删除集群里其它索引。同一进程内，同步与清理互斥；多副本部署时请避免多个 Pod 同时操作同一站点。
+
 ### 索引管理接口
-```
-# 清理无别名索引
-GET http://localhost:8080/clean/noalias
-GET http://localhost:8080/clean/noalias/v5
+```bash
+curl -H "Authorization: Bearer $SQLSYNCIFY_AUTH_TOKEN" \
+  "http://127.0.0.1:8080/clean/noalias/{site}"
+curl -H "Authorization: Bearer $SQLSYNCIFY_AUTH_TOKEN" \
+  "http://127.0.0.1:8080/clean/noalias/v5/{site}"
 ```
 
 ### 同义词配置接口
@@ -94,19 +105,25 @@ goctl api go --api sqlsyncify.api --dir .
 
 ### 启用 pprof
 - 设置环境变量：`APP_DEBUG=true`
-- 重启应用
+- 重启应用。pprof 只监听 `127.0.0.1:6060`。
 
 ### 性能监控工具
 ```bash
-# 查看性能分析面板
-http://localhost:6060/debug/pprof
+# 查看性能分析面板（本机）
+http://127.0.0.1:6060/debug/pprof
 
 # 查看内存占用
-go tool pprof --text http://localhost:6060/debug/pprof/heap
+go tool pprof --text http://127.0.0.1:6060/debug/pprof/heap
 
 # 图形化分析界面
-go tool pprof -http=:7778 http://localhost:6060/debug/pprof/heap
+go tool pprof -http=:7778 http://127.0.0.1:6060/debug/pprof/heap
 ```
+
+## 安全说明
+
+- `GET` / `HEAD /synonym/{site}/{lang}` 不鉴权，供 Elasticsearch 同义词插件拉取。不要把服务端口直接暴露到公网。
+- 示例配置里的数据库口令和 Elasticsearch 地址是占位值，部署时请换成实际环境的密钥，不要把真实口令写进仓库。
+- 数据源使用驱动的 `Config` 连接，口令不会再被拼进 DSN。日志只记录 host、库名和用户名。
 
 ## 许可证
 

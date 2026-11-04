@@ -44,6 +44,7 @@ func (l *AllLogic) All(req *types.Request) (*types.Response, error) {
 	//prepare
 	dbLocal, err := svc.NewSqliteConn(req.Site)
 	if err != nil {
+		_ = db.Close()
 		l.Error(req.Site, " prepare error:", err)
 		return nil, err
 	}

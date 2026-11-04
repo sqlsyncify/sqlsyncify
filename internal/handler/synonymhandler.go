@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"errors"
 	"log"
 	"net/http"
 	"sqlsyncify/internal/utils"
@@ -33,14 +32,18 @@ func init() {
 // 只要有一个发生变化，es插件就会去获取新的同义词来更新相应的同义词
 func SynonymHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// POST is not used by the ES synonym plugin. Require the admin token so it
+		// cannot be mistaken for an unauthenticated write.
+		if r.Method == http.MethodPost && !authorizeAdmin(w, r, svcCtx.Config) {
+			return
+		}
 		var req types.SynonymRequest
 		if err := httpx.Parse(r, &req); err != nil {
 			httpx.Error(w, err)
 			return
 		}
-		v := utils.CheckSiteFormat(req.Site)
-		if !v {
-			httpx.Error(w, errors.New("invalid site"))
+		if !utils.CheckSiteFormat(req.Site) || !utils.CheckLangFormat(req.Lang) {
+			http.Error(w, "invalid site or lang", http.StatusBadRequest)
 			return
 		}
 

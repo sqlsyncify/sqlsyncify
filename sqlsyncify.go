@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"log"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"sqlsyncify/internal/config"
 	"sqlsyncify/internal/handler"
 	"sqlsyncify/internal/svc"
+	"strings"
 
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/rest"
@@ -24,9 +24,10 @@ func main() {
 
 	var c config.Config
 	conf.MustLoad(*configFile, &c)
-
-	cfg, _ := json.Marshal(c)
-	log.Println(string(cfg))
+	log.Printf("[INFO] config loaded, host=%s port=%d\n", c.Host, c.Port)
+	if c.AdminToken() == "" {
+		log.Println("[WARN] admin API is disabled until SQLSYNCIFY_AUTH_TOKEN or AuthToken is set")
+	}
 
 	server := rest.MustNewServer(c.RestConf)
 	defer server.Stop()
@@ -36,9 +37,12 @@ func main() {
 	handler.RegisterHandlers(server, ctx)
 
 	debug := os.Getenv("APP_DEBUG")
-	if debug == "1" || debug == "true" {
+	if debug == "1" || strings.EqualFold(debug, "true") {
 		go func() {
-			log.Println(http.ListenAndServe("0.0.0.0:6060", nil))
+			// Loopback only. pprof can dump memory, including indexed documents and credentials.
+			addr := "127.0.0.1:6060"
+			log.Printf("[INFO] pprof listening on %s\n", addr)
+			log.Println(http.ListenAndServe(addr, nil))
 		}()
 	}
 	log.Printf("当前系统的 CPU 核心数为: %d，当前 GOMAXPROCS 为 %d\n", runtime.NumCPU(), runtime.GOMAXPROCS(0))

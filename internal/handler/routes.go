@@ -33,18 +33,19 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 				Handler: SqlsyncifyAllHandler(serverCtx),
 			},
 			{
+				// :lang matches sqlsyncify.api, the README, and ES synonym URLs.
 				Method:  http.MethodHead,
-				Path:    "/synonym/:site",
+				Path:    "/synonym/:site/:lang",
 				Handler: SynonymHeadHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodGet,
-				Path:    "/synonym/:site",
+				Path:    "/synonym/:site/:lang",
 				Handler: SynonymHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodPost,
-				Path:    "/synonym/:site",
+				Path:    "/synonym/:site/:lang",
 				Handler: SynonymHandler(serverCtx),
 			},
 		},

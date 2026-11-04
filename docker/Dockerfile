@@ -1,5 +1,5 @@
 # https://www.cnblogs.com/kevinwan/p/16033634.html
-FROM golang:alpine AS builder
+FROM golang:1.26-alpine AS builder
 # 安装 gcc、musl-dev、和其他构建工具, cgo需要gcc
 # --no-cache
 RUN apk add  gcc musl-dev

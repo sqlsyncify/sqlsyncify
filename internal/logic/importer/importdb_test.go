@@ -14,6 +14,9 @@ import (
 )
 
 func TestImportDb(t *testing.T) {
+	if os.Getenv("SQLSYNCIFY_INTEGRATION") == "" {
+		t.Skip("set SQLSYNCIFY_INTEGRATION=1 to run against MySQL and Elasticsearch")
+	}
 
 	_ = os.Chdir("../../../")
 	t.Log(os.Getwd())

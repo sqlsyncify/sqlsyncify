@@ -12,6 +12,7 @@ import (
 	"sqlsyncify/internal/config"
 	"sqlsyncify/internal/utils"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -41,6 +42,25 @@ type exporterImplement struct {
 	cfgv5           *ExporterConfigV5
 	countSuccessful uint64
 	countFail       uint64
+	mu              sync.Mutex
+	runErr          error
+}
+
+func (exp *exporterImplement) fail(err error) {
+	if err == nil {
+		return
+	}
+	exp.mu.Lock()
+	defer exp.mu.Unlock()
+	if exp.runErr == nil {
+		exp.runErr = err
+	}
+}
+
+func (exp *exporterImplement) failed() error {
+	exp.mu.Lock()
+	defer exp.mu.Unlock()
+	return exp.runErr
 }
 
 // NewExporter 入口
@@ -54,24 +74,22 @@ func NewExporter(config *ExporterConfig) Exporter {
 
 // v8 es client
 func (exp *exporterImplement) initClient() error {
-	log.Println("conf.EsCluster", exp.cfg.SiteConf.EsCluster)
-	if len(exp.cfg.SiteConf.EsCluster) == 0 {
-		return errors.New("require es cluster addr")
-	}
-	// https://github.com/elastic/go-elasticsearch/blob/main/_examples/bulk/indexer.go
-	esClient, err := elasticsearch.NewClient(elasticsearch.Config{
-		Addresses: strings.Split(exp.cfg.SiteConf.EsCluster, ","),
-		// APIKey:    conf.EsApiKey,
-		// Retry on 429 TooManyRequests statuses
-		//
-		RetryOnStatus: []int{502, 503, 504, 429},
-		// Retry up to 5 attempts
-		//
-		MaxRetries: 3,
-		// EnableDebugLogger: true,
-	})
+	addrs, err := utils.ParseESAddresses(exp.cfg.SiteConf.EsCluster)
 	if err != nil {
-		return errors.New(fmt.Sprintf("NewExporter, create es client error:%s", err.Error()))
+		return err
+	}
+	log.Println("conf.EsCluster", strings.Join(addrs, ","))
+	cfg := elasticsearch.Config{
+		Addresses:     addrs,
+		RetryOnStatus: []int{502, 503, 504, 429},
+		MaxRetries:    3,
+	}
+	if key := strings.TrimSpace(exp.cfg.SiteConf.EsApiKey); key != "" {
+		cfg.APIKey = key
+	}
+	esClient, err := elasticsearch.NewClient(cfg)
+	if err != nil {
+		return fmt.Errorf("NewExporter, create es client error:%s", err.Error())
 	}
 	exp.cfg.EsClient = esClient
 	return nil
@@ -83,38 +101,53 @@ func (exp *exporterImplement) Run() (uint64, error) {
 	if v == -1 {
 		return exp.runV5()
 	}
+	if !utils.SafeIndexToken(exp.cfg.FullIndexName) {
+		return 0, errors.New("invalid index name")
+	}
 	err := exp.initClient()
 	if err != nil {
 		return 0, err
 	}
-	log.Println("conf.EsCluster", exp.cfg.SiteConf.EsCluster)
-	if len(exp.cfg.SiteConf.EsCluster) == 0 {
-		return 0, errors.New("ExportEs, cannot empty es cluster addr")
-	}
-	dirPath := fmt.Sprintf("./etc/sites/%s/sql-export/", exp.cfg.SiteConf.Site)
-	// 使用os.Stat获取文件信息
-	_, err = os.Stat(dirPath)
-	if os.IsNotExist(err) {
-		//不存在站点目录
-		return 0, fmt.Errorf("[Export] site:%s do not found sql-export path", exp.cfg.SiteConf.Site)
-	} else if err != nil {
-		// 其他错误，例如权限问题
+	dirPath, err := utils.ResolveUnder("etc/sites", exp.cfg.SiteConf.Site, "sql-export")
+	if err != nil {
 		return 0, err
 	}
-	sqlFiles, _ := utils.ScanDir(dirPath)
-
-	mapping, err := os.ReadFile(fmt.Sprintf("etc/sites/%s/mapping.json", exp.cfg.SiteConf.Site))
-	if err != nil {
-		return 0, errors.New(fmt.Sprintf("ExportEs, read mapping error: %s", err.Error()))
+	_, err = os.Stat(dirPath)
+	if os.IsNotExist(err) {
+		return 0, fmt.Errorf("[Export] site:%s do not found sql-export path", exp.cfg.SiteConf.Site)
+	} else if err != nil {
+		return 0, err
 	}
-	setting, err := os.ReadFile(fmt.Sprintf("etc/sites/%s/setting.json", exp.cfg.SiteConf.Site))
+	sqlFiles, err := utils.ScanDir(dirPath)
 	if err != nil {
-		return 0, errors.New(fmt.Sprintf("ExportEs, read setting error: %s", err.Error()))
+		return 0, err
 	}
 
-	// setting替换关键词
-	setting = exp.filterSetting(setting)
-	mapping = exp.filterSetting(mapping)
+	mappingPath, err := utils.ResolveUnder("etc/sites", exp.cfg.SiteConf.Site, "mapping.json")
+	if err != nil {
+		return 0, err
+	}
+	settingPath, err := utils.ResolveUnder("etc/sites", exp.cfg.SiteConf.Site, "setting.json")
+	if err != nil {
+		return 0, err
+	}
+	mapping, err := os.ReadFile(mappingPath)
+	if err != nil {
+		return 0, fmt.Errorf("ExportEs, read mapping error: %s", err.Error())
+	}
+	setting, err := os.ReadFile(settingPath)
+	if err != nil {
+		return 0, fmt.Errorf("ExportEs, read setting error: %s", err.Error())
+	}
+
+	setting, err = exp.filterSetting(setting)
+	if err != nil {
+		return 0, err
+	}
+	mapping, err = exp.filterSetting(mapping)
+	if err != nil {
+		return 0, err
+	}
 
 	log.Println("ready to create new index:", exp.cfg.FullIndexName)
 	body := fmt.Sprintf(`{
@@ -129,10 +162,12 @@ func (exp *exporterImplement) Run() (uint64, error) {
 		exp.cfg.EsClient.Indices.Create.WithBody(strings.NewReader(body)),
 	)
 	if err != nil {
-		return 0, errors.New(fmt.Sprintf("ExportEs, cannot create es index: %s", err.Error()))
+		return 0, fmt.Errorf("ExportEs, cannot create es index: %s", err.Error())
 	}
 	if res.IsError() {
-		return 0, errors.New(fmt.Sprintf("ExportEs, cannot create es index: %s", res.String()))
+		msg := res.String()
+		_ = res.Body.Close()
+		return 0, fmt.Errorf("ExportEs, cannot create es index: %s", msg)
 	}
 	_ = res.Body.Close()
 
@@ -159,6 +194,8 @@ func (exp *exporterImplement) Run() (uint64, error) {
 		err = exp.loadDataFromSqlFile(file, bulkIndexer)
 		if err != nil {
 			log.Println(file, err)
+			_ = bulkIndexer.Close(exp.cfg.Ctx)
+			return 0, err
 		}
 	}
 
@@ -207,10 +244,10 @@ func (exp *exporterImplement) loadDataFromSqlFile(file string, bulkIndexer esuti
 	sqlStr := string(sqlf)
 	// 不以SELECT开头的,就不用处理查询结果
 	// 原则上一个站点一次只做写入一个索引, 但是可以做SQL分页查询导出到同一个索引
-	if false == utils.IsPrefix(sqlStr, "SELECT") {
-		_, err = exp.cfg.DbLocal.Exec(sqlStr)
+	if !utils.IsPrefix(sqlStr, "SELECT") {
+		_, err = exp.cfg.DbLocal.ExecContext(exp.cfg.Ctx, sqlStr)
 		if err != nil {
-			log.Fatalln(file, " error:", err)
+			return fmt.Errorf("%s: %w", file, err)
 		}
 		return nil
 	}
@@ -266,7 +303,7 @@ func (exp *exporterImplement) loadDataFromSqlFile(file string, bulkIndexer esuti
 			log.Printf("Cannot encode sku %s: %s \n", result[primaryKey], err)
 			continue
 		}
-		if count < 1 {
+		if count < 1 && exp.cfg.Debug {
 			log.Println(string(jsonBody))
 		}
 		count++
@@ -290,10 +327,10 @@ func (exp *exporterImplement) loadDataFromSqlFile(file string, bulkIndexer esuti
 			},
 		)
 		if err != nil {
-			log.Printf("Unexpected error(bulkIndexer.Add): %s \n", err)
+			return fmt.Errorf("bulk add: %w", err)
 		}
 	}
-	return nil
+	return rows.Err()
 }
 
 func (exp *exporterImplement) bulkOnFailure(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem, err error) {

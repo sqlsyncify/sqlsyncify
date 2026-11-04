@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -16,8 +15,10 @@ import (
 
 func IsPrefix(str string, prefix string) bool {
 	str = RemoveSqlComment(str)
-	tmp := str[:len(prefix)]
-	return strings.EqualFold(tmp, prefix)
+	if prefix == "" || len(str) < len(prefix) {
+		return false
+	}
+	return strings.EqualFold(str[:len(prefix)], prefix)
 }
 
 func ScanDir(dirPath string) ([]string, error) {
@@ -31,8 +32,8 @@ func ScanDir(dirPath string) ([]string, error) {
 			return nil // 继续遍历
 		}
 
-		// 检查是否为文件（排除目录）
-		if !info.IsDir() && filepath.Ext(path) == ".sql" {
+		// Regular files only: a symlink named *.sql would otherwise be read and executed.
+		if info.Mode().IsRegular() && filepath.Ext(path) == ".sql" {
 			log.Println("Found File:", path)
 			sqlFiles = append(sqlFiles, path)
 		}
@@ -150,20 +151,29 @@ func RemoveSqlComment(str string) string {
 	var s, e int
 	for {
 		str = strings.TrimSpace(str)
-		if strings.ToUpper(str[:4]) == "WITH" {
+		if str == "" {
+			return str
+		}
+		if len(str) >= 4 && strings.EqualFold(str[:4], "WITH") {
 			str1, err := RemoveWithClause(str)
 			if err != nil {
 				str = err.Error()
 			} else {
 				str = str1
 			}
-		} else if str[:3] == "-- " {
+		} else if strings.HasPrefix(str, "-- ") {
 			s = strings.Index(str, "\n")
+			if s < 0 {
+				return ""
+			}
 			str = str[s+1:]
 		} else if strings.Contains(str, "/*") && strings.Contains(str, "*/") {
 			// 移除注释
 			s = strings.Index(str, "/*")
 			e = strings.Index(str, "*/")
+			if e < s {
+				break
+			}
 			str = strings.ReplaceAll(str, str[s:e+2], "")
 		} else {
 			break
@@ -238,9 +248,9 @@ func RemoveElement[T comparable](slice []T, index int) []T {
 }
 
 func CheckSiteFormat(input string) bool {
-	// 允许：字母、数字、下划线、连字符
-	pattern := `^[a-zA-Z0-9_\-@]+$`
-
-	matched, _ := regexp.MatchString(pattern, input)
-	return matched
+	// 允许：字母、数字、下划线、连字符、@。拒绝 '.' 和路径分隔符。
+	if input == "" || len(input) > maxSiteLen {
+		return false
+	}
+	return siteRe.MatchString(input)
 }
