@@ -27,6 +27,24 @@ func Allow(r *http.Request, token string) bool {
 	return subtle.ConstantTimeCompare([]byte(got), []byte(token)) == 1
 }
 
+// Middleware is a go-zero rest.Middleware. It checks the admin token before next runs.
+// token is called per request so SQLSYNCIFY_AUTH_TOKEN stays authoritative.
+func Middleware(token func() string) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			secret := ""
+			if token != nil {
+				secret = token()
+			}
+			if !Allow(r, secret) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next(w, r)
+		}
+	}
+}
+
 func tokenFromRequest(r *http.Request) string {
 	if h := strings.TrimSpace(r.Header.Get("Authorization")); h != "" {
 		const prefix = "bearer "

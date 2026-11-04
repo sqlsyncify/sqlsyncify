@@ -36,3 +36,32 @@ func TestAllowBearerAndHeader(t *testing.T) {
 		t.Fatal("wrong token should be rejected")
 	}
 }
+
+func TestMiddleware(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	protected := Middleware(func() string { return "secret" })(next)
+
+	missing := httptest.NewRequest(http.MethodGet, "/sync/all/wordpress", nil)
+	rec := httptest.NewRecorder()
+	protected.ServeHTTP(rec, missing)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("missing token status = %d", rec.Code)
+	}
+
+	ok := httptest.NewRequest(http.MethodGet, "/sync/all/wordpress", nil)
+	ok.Header.Set("X-Auth-Token", "secret")
+	rec = httptest.NewRecorder()
+	protected.ServeHTTP(rec, ok)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("valid token status = %d", rec.Code)
+	}
+
+	closed := Middleware(func() string { return "" })(next)
+	rec = httptest.NewRecorder()
+	closed.ServeHTTP(rec, ok)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("empty configured token status = %d", rec.Code)
+	}
+}

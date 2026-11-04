@@ -12,9 +12,6 @@ import (
 // CleanNoAliasHandler 清除本站点没有别名的生成索引
 func CleanNoAliasHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !authorizeAdmin(w, r, svcCtx.Config) {
-			return
-		}
 		req, ok := parseSiteRequest(w, r)
 		if !ok {
 			return

@@ -3,22 +3,12 @@ package handler
 import (
 	"net/http"
 
-	"sqlsyncify/internal/auth"
-	"sqlsyncify/internal/config"
 	"sqlsyncify/internal/svc"
 	"sqlsyncify/internal/types"
 	"sqlsyncify/internal/utils"
 
 	"github.com/zeromicro/go-zero/rest/httpx"
 )
-
-func authorizeAdmin(w http.ResponseWriter, r *http.Request, c config.Config) bool {
-	if auth.Allow(r, c.AdminToken()) {
-		return true
-	}
-	http.Error(w, "unauthorized", http.StatusUnauthorized)
-	return false
-}
 
 func parseSiteRequest(w http.ResponseWriter, r *http.Request) (types.Request, bool) {
 	var req types.Request

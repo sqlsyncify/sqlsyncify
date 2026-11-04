@@ -11,9 +11,6 @@ import (
 
 func SqlsyncifyAllHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !authorizeAdmin(w, r, svcCtx.Config) {
-			return
-		}
 		req, ok := parseSiteRequest(w, r)
 		if !ok {
 			return
