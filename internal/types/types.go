@@ -16,6 +16,7 @@ type Response struct {
 
 type SynonymHeadRequest struct {
 	Site           string `path:"site"`
+	Lang           string `path:"lang"`
 	LastUpdateTime string `header:"If-Modified-Since,optional"`
 	Etag           string `header:"If-None-Match,optional"`
 }

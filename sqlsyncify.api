@@ -40,7 +40,7 @@ service sqlsyncify-api {
 	get /sync/all/:site (Request) returns (Response)
 
 	@handler CleanNoAliasHandler
-	get /clean/noalias
+	get /clean/noalias/:site (Request)
 
 	@handler SynonymHeadHandler
 	head /synonym/:site/:lang (SynonymHeadRequest) returns (SynonymHeadResponse)
@@ -50,15 +50,9 @@ service sqlsyncify-api {
 	post /synonym/:site/:lang (SynonymRequest) returns (SynonymResponse)
 
 	@handler CleanNoAliasV5Handler
-	get /clean/noalias/v5
+	get /clean/noalias/v5/:site (Request)
 
 	@handler RootHandler
 	get /
-
-	@handler TestLockFileHandler
-	get /test/lock/file
-
-	@handler TestLockMapHandler
-	get /test/lock/map
 }
 

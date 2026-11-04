@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"errors"
 	"log"
 	"net/http"
 	"sqlsyncify/internal/utils"
@@ -38,9 +37,8 @@ func SynonymHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			httpx.Error(w, err)
 			return
 		}
-		v := utils.CheckSiteFormat(req.Site)
-		if !v {
-			httpx.Error(w, errors.New("invalid site"))
+		if !utils.CheckSiteFormat(req.Site) || !utils.CheckLangFormat(req.Lang) {
+			http.Error(w, "invalid site or lang", http.StatusBadRequest)
 			return
 		}
 

@@ -1,6 +1,9 @@
 package config
 
 import (
+	"os"
+	"strings"
+
 	"github.com/zeromicro/go-zero/rest"
 )
 
@@ -8,6 +11,17 @@ type Config struct {
 	rest.RestConf
 
 	AppHost string
+	// AuthToken protects /sync and /clean. SQLSYNCIFY_AUTH_TOKEN overrides this
+	// value when set. When both are empty those routes are denied.
+	AuthToken string `json:",optional"`
+}
+
+// AdminToken is the shared secret for state-changing routes.
+func (c Config) AdminToken() string {
+	if v := strings.TrimSpace(os.Getenv("SQLSYNCIFY_AUTH_TOKEN")); v != "" {
+		return v
+	}
+	return strings.TrimSpace(c.AuthToken)
 }
 
 type DataSource struct {

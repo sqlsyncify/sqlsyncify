@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -43,21 +44,27 @@ func (exp *exporterImplement) aliasV5() error {
 		return err
 	}
 	if res.StatusCode == http.StatusNotFound {
+		_, _ = io.Copy(io.Discard, res.Body)
+		res.Body.Close()
 		log.Println("alias not found, put new alias", exp.cfg.SiteConf.AliasName, " -> ", exp.cfg.FullIndexName)
 		//add alias
 		req2 := esapi.IndicesPutAliasRequest{Index: []string{exp.cfg.FullIndexName}, Name: exp.cfg.SiteConf.AliasName}
-		res, err := req2.Do(exp.cfg.Ctx, exp.cfgv5.EsClientV5)
-		// res, err = ex.cfgv5.EsClientV5.Indices.PutAlias([]string{AliasName}, ex.cfg.SiteConf.AliasName)
+		res, err = req2.Do(exp.cfg.Ctx, exp.cfgv5.EsClientV5)
 		if err != nil {
 			return err
 		}
 		if res.IsError() {
-			return errors.New("put alias error:" + res.String())
+			msg := res.String()
+			res.Body.Close()
+			return errors.New("put alias error:" + msg)
 		}
+		res.Body.Close()
 		return nil
 	} else if res.IsError() {
-		log.Println("IndicesExistsAliasRequest fail:", res.String())
-		return errors.New(res.String())
+		msg := res.String()
+		res.Body.Close()
+		log.Println("IndicesExistsAliasRequest fail:", msg)
+		return errors.New(msg)
 	}
 	res.Body.Close()
 
@@ -69,7 +76,9 @@ func (exp *exporterImplement) aliasV5() error {
 		return err
 	}
 	if resp.IsError() {
-		return errors.New("get alias error:" + resp.String())
+		msg := resp.String()
+		resp.Body.Close()
+		return errors.New("get alias error:" + msg)
 	}
 	body := new(bytes.Buffer)
 	_, _ = body.ReadFrom(resp.Body)
@@ -145,7 +154,9 @@ func (exp *exporterImplement) aliasV5() error {
 	if err != nil {
 		return errors.New("update alias fail:" + err.Error())
 	} else if res2.IsError() {
-		return errors.New("update alias error:" + res2.String())
+		msg := res2.String()
+		res2.Body.Close()
+		return errors.New("update alias error:" + msg)
 	}
 	log.Println(res2.String())
 	res2.Body.Close()

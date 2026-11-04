@@ -4,14 +4,17 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"sqlsyncify/internal/utils"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func NewSqliteConn(site string) (*sql.DB, error) {
-	// A workaround is to use "file::memory:?cache=shared" (or "file:foobar?mode=memory&cache=shared").
-	// Every connection to this string will point to the same in-memory database.
-	//dbFile := fmt.Sprintf("file:%s?mode=memory&cache=shared", site)
+	if !utils.CheckSiteFormat(site) {
+		return nil, fmt.Errorf("invalid site")
+	}
+	// The query suffix is part of the historical filename, not a SQLite URI.
+	// Site tokens cannot contain separators, '?', or '&', so this cannot escape ./storage.
 	dbFile := fmt.Sprintf("./storage/%s.db?cache=shared&mode=memory", site)
 	sqliteConn, err := sql.Open("sqlite3", dbFile)
 	if err != nil {

@@ -3,8 +3,10 @@ package logic
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sqlsyncify/internal/types"
+	"sqlsyncify/internal/utils"
 	"strings"
 
 	"github.com/elastic/go-elasticsearch/v8"
@@ -35,16 +37,19 @@ func (l *CleanNoAliasLogic) CleanNoAlias(req *types.Request) error {
 		l.Error(req.Site, " failed to load site conf: ", err)
 		return err
 	}
-	esClient, err := elasticsearch.NewTypedClient(elasticsearch.Config{
-		Addresses: strings.Split(siteConf.EsCluster, ","),
-		APIKey:    siteConf.EsApiKey,
-		// Retry on 429 TooManyRequests statuses
-		//
+	addrs, err := utils.ParseESAddresses(siteConf.EsCluster)
+	if err != nil {
+		return err
+	}
+	esCfg := elasticsearch.Config{
+		Addresses:     addrs,
 		RetryOnStatus: []int{502, 503, 504, 429},
-		// Retry up to 5 attempts
-		//
-		MaxRetries: 5,
-	})
+		MaxRetries:    5,
+	}
+	if key := strings.TrimSpace(siteConf.EsApiKey); key != "" {
+		esCfg.APIKey = key
+	}
+	esClient, err := elasticsearch.NewTypedClient(esCfg)
 	if err != nil {
 		return err
 	}
@@ -56,33 +61,33 @@ func (l *CleanNoAliasLogic) CleanNoAlias(req *types.Request) error {
 	}
 	var delIndex []string
 	for index, alias := range mapResp {
-		if strings.HasPrefix(index, ".") {
+		// Only this site's generated indexes. Other tenants and in-progress names
+		// that do not match {prefix}_YYYYMMDDHHMMSS are left alone.
+		if !utils.IsGeneratedSiteIndex(index, siteConf.IndexName, siteConf.AliasName) {
 			continue
 		}
-		// 没有别名时是空map: len(mapObj) == 0
-		//l.Logger.Info(index, " ", alias.Aliases)
 		if alias.Aliases == nil || len(alias.Aliases) == 0 {
 			delIndex = append(delIndex, index)
 		} else {
 			def, _ := json.Marshal(alias.Aliases)
-
 			l.Logger.Info(index, " has alias: ", string(def))
 		}
 	}
-	if len(delIndex) > 0 {
-		l.Logger.Info("deleted no alias index:", strings.Join(delIndex, ", "))
-		req1 := esapi.IndicesDeleteRequest{Index: delIndex}
-		resp1, err := req1.Do(l.ctx, esClient)
-		if err != nil {
-			return err
-		} else if resp1.IsError() {
-			log.Println(resp1.String())
-		} else {
-			log.Println(resp1.String())
-			_ = resp1.Body.Close()
-		}
-	} else {
+	if len(delIndex) == 0 {
 		log.Println("no index will delete")
+		return nil
 	}
+	l.Logger.Info("deleted no alias index:", strings.Join(delIndex, ", "))
+	req1 := esapi.IndicesDeleteRequest{Index: delIndex}
+	resp1, err := req1.Do(l.ctx, esClient)
+	if err != nil {
+		return err
+	}
+	defer resp1.Body.Close()
+	if resp1.IsError() {
+		log.Println(resp1.String())
+		return fmt.Errorf("delete index failed: status %d", resp1.StatusCode)
+	}
+	log.Println(resp1.String())
 	return nil
 }
